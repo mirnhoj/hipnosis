@@ -5,5 +5,18 @@ api_version: 1
 threadsafe: true
 
 handlers:
+- url: /assets
+  static_dir: assets
+
+- url: /css
+  static_dir: css
+
+- url: /js
+  static_dir: js
+
 - url: /.*
-  script: hipnosis.app
+  script: main.app
+
+libraries:
+- name: jinja2
+  version: latest

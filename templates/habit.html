@@ -1,0 +1,15 @@
+﻿<div class="habit">
+  <div class="habit-heading">
+    <div class="habit-title">
+      {{habit.title}}
+    </div>
+
+    <div class="habit-date">
+      {{habit.created.strftime("%b %d, %Y")}}
+    </div>
+  </div>
+
+  <div class="habit-behavior">
+    {{habit._render_text | safe}}
+  </div>
+</div>

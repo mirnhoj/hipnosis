@@ -1,0 +1,21 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+  <h2>new habit</h2>
+
+    <form method="post">
+      <label>
+        <div>title</div>
+        <input type="text" name="title" value="{{title}}">
+      </label>
+
+      <label>
+        <div>behavior</div>
+        <textarea name="behavior">{{behavior}}</textarea>
+      </label>
+
+      <div class="error">{{error}}</div>
+
+      <input type="submit">
+    </form>
+{% endblock %}

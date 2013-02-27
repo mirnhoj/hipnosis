@@ -1,11 +1,15 @@
+import hashlib
+import hmac
 import jinja2
 import os
+import re
 import webapp2
+import json
 
 from google.appengine.ext import db
 from google.appengine.api import users
 
-
+    
 ### GLOBALS
 
 template_directory = os.path.join(os.path.dirname(__file__), 'templates')
@@ -13,6 +17,51 @@ jinja_environment = jinja2.Environment(
     loader=jinja2.FileSystemLoader(template_directory), autoescape=True)
 
 
+hmac_message = os.path.join(os.path.dirname(__file__), 'secret/message')
+f = open(hmac_message, 'r')
+SECRET = f.read().strip()
+f.close()
+
+
+def render_template(template, **template_values):
+    """Renders the given template with the given template_values"""
+    # retrieve the html template
+    t = jinja_environment.get_template(template)
+
+    # render the html template with the given dictionary
+    return t.render(template_values)
+
+
+def create_salt():
+    return hashlib.sha256(os.urandom(16)).hexdigest()
+
+
+def create_salt_hash_pair(input, salt=None):
+    if not salt:
+        salt = create_salt()
+    hash = hmac.new(SECRET, salt + input, hashlib.sha256).hexdigest()
+    return "%s|%s" % (salt, hash)
+
+
+def validate_salt_hash_pair(input, hash):
+    salt = hash.split('|')[0]
+    return hash == create_salt_hash_pair(input, salt)
+
+
+def create_value_salt_hash_triplet(value, salt=None):
+    if not salt:
+        salt = create_salt()
+    hash = hmac.new(SECRET, str(value) + salt).hexdigest()
+    return "%s|%s|%s" % (value, salt, hash)
+
+
+def validate_value_salt_hash_triplet(hash):
+    value = hash.split('|')[0]
+    salt = hash.split('|')[1]
+    if hash == create_value_salt_hash_triplet(value, salt):
+        return value
+
+        
 ### CLASSES
 
 class Habit(db.Model):
@@ -30,7 +79,7 @@ class Person(db.Model):
     """Models a person."""
     user_id = db.StringProperty()
 
-
+    
 ### HANDLERS
 
 class BaseHandler(webapp2.RequestHandler):
@@ -56,35 +105,35 @@ class BaseHandler(webapp2.RequestHandler):
     def get_encrypted_cookie(self, name):
         """Function to get the value of a named parameter of an http cookie"""
         return validate_value_salt_hash_triplet(self.request.cookies.get(name))
-
-
+    
+        
 class MainPage(BaseHandler):
-    def get(self):
+    def get(self):   
         user = users.get_current_user()
-
+        
         if user:
             url = users.create_logout_url(self.request.uri)
             url_linktext = 'Logout'
-            person = db.GqlQuery("SELECT * FROM Person " +
+            person = db.GqlQuery("SELECT * FROM Person " + 
                                  "WHERE user_id = :1 ",
                                  user.user_id())
             person = person.get()
-
+            
             if not person:
                 person = Person(user_id = user.user_id())
                 person.put()
-
-            habits = db.GqlQuery("SELECT * FROM Habit " +
-                                 "WHERE ANCESTOR IS :1 " +
+            
+            habits = db.GqlQuery("SELECT * FROM Habit " + 
+                                 "WHERE ANCESTOR IS :1 " + 
                                  "ORDER BY created DESC ",
                                  person)
             template_values = {
                 'habits': habits,
                 'url': url,
                 'url_linktext': url_linktext
-            }
+            }            
             self.write_template('hipnosis.html', **template_values)
-
+            
 
         else:
             url = users.create_login_url(self.request.uri)
@@ -93,13 +142,13 @@ class MainPage(BaseHandler):
                 'url': url,
                 'url_linktext': url_linktext
             }
-
+        
             self.write_template('base.html', **template_values)
-
+        
 class HabitPage(BaseHandler):
     def get(self, habit_id):
         user = users.get_current_user()
-
+        
         if user:
             url = users.create_logout_url(self.request.uri)
             url_linktext = 'Logout'
@@ -107,30 +156,30 @@ class HabitPage(BaseHandler):
             url = users.create_login_url(self.request.uri)
             url_linktext = 'Login'
 
-        person = db.GqlQuery("SELECT __key__ FROM Person " +
+        person = db.GqlQuery("SELECT __key__ FROM Person " + 
                              "WHERE user_id = :1 ",
                              user.user_id())
         person = person.get()
-
+        
         if not person:
             person = Person(user_id = user.user_id())
             person.put()
-
+        
         # key = db.Key.from_path('Habit', int(habit_id), parent = person)
         habit = Habit.get_by_id(int(habit_id), parent = person)
 
-
+        
         # if not habit:
             # self.error(404)
             # return
 
         self.write_template("permalink.html", habit = habit)
 
-
+        
 class NewHabit(BaseHandler):
     def get(self):
-        user = users.get_current_user()
-
+        user = users.get_current_user()        
+        
         if user:
             self.write_template("newhabit.html")
         else:
@@ -138,7 +187,7 @@ class NewHabit(BaseHandler):
 
     def post(self):
         user = users.get_current_user()
-
+        
         if user:
             url = users.create_logout_url(self.request.uri)
             url_linktext = 'Logout'
@@ -146,15 +195,15 @@ class NewHabit(BaseHandler):
             url = users.create_login_url(self.request.uri)
             url_linktext = 'Login'
 
-        person = db.GqlQuery("SELECT * FROM Person " +
+        person = db.GqlQuery("SELECT * FROM Person " + 
                              "WHERE user_id = :1 ",
                              user.user_id())
         person = person.get()
-
+        
         if not person:
             person = Person(user_id = user.user_id())
             person.put()
-
+        
         if not user:
             self.redirect('/')
 
@@ -169,9 +218,9 @@ class NewHabit(BaseHandler):
         else:
             error = "title and behavior, please!"
             self.write_template("newhabit.html", title=title, behavior=behavior, error=error)
-
+            
 ### ROUTER
-
+        
 app = webapp2.WSGIApplication([('/', MainPage),
                                ('/habit/([0-9]+)', HabitPage),
                                ('/newhabit', NewHabit)

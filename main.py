@@ -13,6 +13,17 @@ jinja_environment = jinja2.Environment(
     loader=jinja2.FileSystemLoader(template_directory), autoescape=True)
 
 
+def newline_to_html(text):
+    return text.replace('\n', '<br>')
+   
+def render_template(template, **template_values):
+    """Renders the given template with the given template_values"""
+    # retrieve the html template
+    t = jinja_environment.get_template(template)
+
+    # render the html template with the given dictionary
+    return t.render(template_values)
+
 ### CLASSES
 
 class Habit(db.Model):
@@ -41,57 +52,40 @@ class BaseHandler(webapp2.RequestHandler):
         template_values"""
         self.response.out.write(render_template(template, **template_values))
 
-    def set_cookie(self, name, value):
-        """Function to set an http cookie"""
-        self.response.headers.add_header('Set-Cookie', '%s=%s; Path=/' % (name, value))
-
-    def get_cookie(self, name):
-        """Function to get the value of a named parameter of an http cookie"""
-        return self.request.cookies.get(name)
-
-    def set_encrypted_cookie(self, name, value):
-        """Function to set an http cookie"""
-        self.response.headers.add_header('Set-Cookie', '%s=%s; Path=/' % (name, create_value_salt_hash_triplet(value)))
-
-    def get_encrypted_cookie(self, name):
-        """Function to get the value of a named parameter of an http cookie"""
-        return validate_value_salt_hash_triplet(self.request.cookies.get(name))
-
 
 class MainPage(BaseHandler):
     def get(self):
         user = users.get_current_user()
 
         if user:
-            url = users.create_logout_url(self.request.uri)
-            url_linktext = 'Logout'
-            person = db.GqlQuery("SELECT * FROM Person " +
-                                 "WHERE user_id = :1 ",
-                                 user.user_id())
-            person = person.get()
+            # grab current user from datastore or create new user
+            person_query = db.GqlQuery("SELECT * FROM Person " +
+                "WHERE user_id = :1 ",
+                user.user_id())
+            person_entity = person_query.get()
 
-            if not person:
-                person = Person(user_id = user.user_id())
-                person.put()
+            if not person_entity:
+                person_entity = Person(user_id = user.user_id())
+                person_entity.put()
 
-            habits = db.GqlQuery("SELECT * FROM Habit " +
-                                 "WHERE ANCESTOR IS :1 " +
-                                 "ORDER BY created DESC ",
-                                 person)
+            # grab current user's habits from datastore
+            habits_query = db.GqlQuery("SELECT * FROM Habit " +
+                "WHERE ANCESTOR IS :1 " +
+                "ORDER BY created DESC ",
+                person_entity)
+            
+            # write out the current user's habits
             template_values = {
-                'habits': habits,
-                'url': url,
-                'url_linktext': url_linktext
+                'habits': habits_query,
+                'login_href': users.create_logout_url(self.request.uri),
+                'login_content': 'Logout'
             }
-            self.write_template('hipnosis.html', **template_values)
-
-
+            
+            self.write_template('habits.html', **template_values)
         else:
-            url = users.create_login_url(self.request.uri)
-            url_linktext = 'Login'
             template_values = {
-                'url': url,
-                'url_linktext': url_linktext
+                'login_href': users.create_login_url(self.request.uri),
+                'login_content': 'Login'
             }
 
             self.write_template('base.html', **template_values)
